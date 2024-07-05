@@ -1,0 +1,43 @@
+# Logic của việc mà mình truyền file
+# Sender
+# Reciever
+# Upload: Data: client-> serever => client: gửi, server: nhận
+# Download: data đi từ server->client => client: nhận, server: gửi
+
+# Sender: 3 bước
+# 1. truy cập vào browser -> select folder
+# 2. SPLIT file thành N segment
+# 3. Tạo N thread tương ứng -> SEND 
+
+# Reciever: 3 bước
+# 1. Nhận N segments 
+# 2. MERGE các file đã nhận -> save vào 2 cái folder 
+# 3. (optional) xóa các file bị thừa
+
+# GUI
+# homepage 
+# 2 button:
+1. Upload:
+- popup: browser -> select/cancel
+2. Download: 
+- pop up: nhap filename + khung de minh dien(form) -> file_exist/file_not_exist(404)
+
+Ngan:
+select_file_to_upload()
+select_file_to_download()
+
+main()
+start_server()
+
+Thanh:
+recieve_file(filename, num_chunk)
+handle_download()
+
+
+Huyen:
+upload_file(file_path) 
+handle_upload()
+
+Tham khao chtgpt: 
+merge_chunks(chunks, outputfile)
+split_file(file_path, chunk_size) 
