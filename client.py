@@ -1,48 +1,118 @@
-# # Logic của việc mà mình truyền file
-# # Sender
-# # Reciever
-# # Upload: Data: client-> serever => client: gửi, server: nhận
-# # Download: data đi từ server->client => client: nhận, server: gửi
+import os
+import socket
+import threading
+import tkinter as tk
+from tkinter import filedialog, simpledialog, ttk
 
-# # Sender: 3 bước
-# # 1. truy cập vào browser -> select folder
-# # 2. SPLIT file thành N segment
-# # 3. Tạo N thread tương ứng -> SEND 
+# constants
+HOST = 'localhost'
+PORT = 9999
+CHUNK_SIZE = 1024
+UPLOAD_FOLDER = 'Client_data'
+DOWNLOAD_FOLDER = 'Client_data'
 
-# # Reciever: 3 bước
-# # 1. Nhận N segments 
-# # 2. MERGE các file đã nhận -> save vào 2 cái folder 
-# # 3. (optional) xóa các file bị thừa
+# UPLOAD
+def upload_file(file_path):
+    try:
+        # split file into chunks (chunks[] contain file_path)
+        chunks = split_file(file_path, CHUNK_SIZE)
+        num_chunks = len(chunks)
+        
+        # create socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            client_socket.settimeout(10)  # Set a timeout to prevent hanging connections
+            
+            # connect to server
+            client_socket.connect((HOST,PORT))
+            
+            # send request type
+            client_socket.sendall(b"upload".encode())
+            
+            # send file info: {file_path}:{num_chunks}
+            file_info = f"{os.path.basename(file_path)}:{num_chunks}"
+            client_socket.sendall(file_info.encode())
+            
+            # send each chunk
+            for chunk_path in chunks:
+                try:
+                    with open(chunk_path, 'rb') as chunk_file:
+                        # send each byte in chunk
+                        while True:
+                            chunk_data = chunk_file.read(CHUNK_SIZE)
+                            if not chunk_data:
+                                break
+                            client_socket.sendall(chunk_data)
+                except OSError as E:
+                    print(f"Error reading chunk file: {E}")
+                    continue
+                
+            print(f"File {file_path} uploaded successfully.")
+    except socket.error as E:
+        print(f"Socket error: {E}")
+    except Exception as E:
+        print(f"Error: {E}")
+        
+    finally:
+        # close the connection
+        if client_socket:
+            client_socket.close()
+        
+# DOWNLOAD
 
-# #libraries
-# import os
-# import socket
-# import tkinter #message box, tk, filedialog, simpledialog
-# import threading
+# access to browser
+def select_file_to_upload():
+    file_path = filedialog.askopenfilename()
+    if file_path:
+        upload_file(file_path)
+        print(f"File selected: {file_path}")
+    else:
+        print("No file selected to upload.")
+        
+def select_file_to_download():
+    file_name = simpledialog.askstring("Download", "Enter the filename to download:")
+    if file_name:
+        #download_file(file_path)
+        print(f"File selected: {file_name}")
+    else:
+        print("No file selected to download.") 
+        
 
-# #constant
-# HOST = 'localhost' #127.0.0.1
-# PORT = 9999
-# CHUNK_SIZE = 1024 # 1kb
-# UPLOAD_FOLDER = 'Client_data'
+# helper functions
+def split_file(file_path, chunk_size):
+    # intialize a list to stores chunks
+    chunks = []
+    # open the file in read-binary mode
+    with open(file_path, 'rb') as file:
+        # read the file chunks-by-chunks
+            chunk = file.read(chunk_size)
+            while chunk:
+                chunk_filename = f"{file_path}_part_{len(chunks)}"
+                # open file in write-binary mode and write each chunks to new file
+                with open(chunk_filename, 'wb') as chunk_file:
+                    chunk_file.write(chunk)
+                    chunks.append(chunk_filename)
+    # return list of chunk_path
+    return chunks
 
-# #function
-# select_file_to_upload() #Ngan
+def merge_chunks(chunks, output_file):
+    with open(output_file, 'wb') as out_file:
+        for chunk_file in chunks:
+            with open(chunk_file, 'rb') as chunk:
+                out_file.write(chunk.read())
+            os.remove(chunk_file)
 
-# # UPLOAD
-# upload_file(file_path) # 1. split file thanh cac chunk nho -> chay mot vong for de gui tung chunk mot (nho kiem tra tat ca chunk da qua het chua)
-# split_file(file_path, chunk_size) # tach file lon -> N files nho #Ngan
-# # chunks[] -> code -> return chunks
-
-# #DOWNLOAD
-# recieve_file(filename, num_chunk)
-# merge_chunks(chunks, outputfile) # tao mot file output moi -> chay mot vong for -> write tung chunk nho vao(nho kiem tra tat ca chunk da qua het chua)
-
-# # main()
-# # tao socket
-# # tao connection -> signal connect with client nao
-# # chen gui elements (button, thanh tien trinh, chu thich...)
-
-
-# #main entry point
-
+def main():
+    global root
+    root = tk.Tk() # main window
+    root.title("File transfer Application")
+    
+    upload_button = tk.Button(root, text = "Upload file", command = select_file_to_upload)
+    upload_button.pack()
+    
+    # download_button = tk.Button(root, text = "Download file", command = select_file_to_download()).pack
+    # download_button.pack()
+    
+    root.mainloop()
+    
+if __name__ == "__main__":
+    main()
