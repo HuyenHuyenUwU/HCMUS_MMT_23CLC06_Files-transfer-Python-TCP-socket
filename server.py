@@ -39,19 +39,10 @@ def handle_client(conn, addr):
         
 def handle_upload(conn, file_name, num_chunks):
     try:
-        # Create the upload folder if it doesn't exist
-        if not os.path.exists(UPLOAD_FOLDER):
-            os.makedirs(UPLOAD_FOLDER)
-            
-        # Construct the full path where the file will be saved
-        file_path = os.path.join(UPLOAD_FOLDER, file_name)
-        
         chunks = []
-        
-        # Iterate through each chunk of the file
+        # Receive chunks from client
         for i in range(num_chunks):
             chunk = b''
-            # Collect each byte in a chunk until it reaches CHUNK_SIZE
             while len(chunk) < CHUNK_SIZE:
                 received_data = conn.recv(CHUNK_SIZE - len(chunk))
                 if not received_data:
@@ -59,16 +50,32 @@ def handle_upload(conn, file_name, num_chunks):
                 chunk += received_data
                 
             # Create a unique path for each chunk file
-            chunk_path = f"{file_name}_part_{i}"
+            chunk_path = f"chunk_{i+1}.bin" # binary files
+            chunk_path = os.path.join(UPLOAD_FOLDER, chunk_path)
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk)
             chunks.append(chunk_path)
-            print(f"Uploaded {file_name} part {i+1}/{num_chunks}")
-
-        # Merge all chunks into the original file
-        merge_chunks(chunks, file_name)
-        print(f"File {file_name} uploaded successfully")
+            print(f"Received chunk {i+1}/{num_chunks}")
         
+        # Merge chunks into output file
+        output_file_path = os.path.join(UPLOAD_FOLDER, file_name)
+        merge_chunks(chunks, output_file_path)
+        
+        # delete remain files in chunks[]
+        for chunk_path in chunks:
+            try:
+                os.remove(chunk_path)
+            except OSError as E:
+                print(f"Error deleting chunk file {chunk_file}: {E}.")
+                
+        print(f"File {file_name} received and merged successfully")
+        
+    except socket.error as E:
+        print(f"Socket error: {E}")
+    except OSError as E:
+        print(f"Error writing to file: {E}")
+    except Exception as E:
+        print(f"Error: {E}")
     except socket.error as E:
         print(f"Socket error: {E}")
     except OSError as E:

@@ -26,7 +26,7 @@ def upload_file(file_path):
             client_socket.connect((HOST,PORT))
             
             # send request type
-            client_socket.sendall(b"upload".encode())
+            client_socket.sendall(b"upload")
             
             # send file info: {file_path}:{num_chunks}
             file_info = f"{os.path.basename(file_path)}:{num_chunks}"
@@ -84,13 +84,15 @@ def split_file(file_path, chunk_size):
     # open the file in read-binary mode
     with open(file_path, 'rb') as file:
         # read the file chunks-by-chunks
-            chunk = file.read(chunk_size)
-            while chunk:
+            while True:
+                chunk = file.read(chunk_size)
+                if not chunk:
+                    break
                 chunk_filename = f"{file_path}_part_{len(chunks)}"
                 # open file in write-binary mode and write each chunks to new file
                 with open(chunk_filename, 'wb') as chunk_file:
                     chunk_file.write(chunk)
-                    chunks.append(chunk_filename)
+                chunks.append(chunk_filename)
     # return list of chunk_path
     return chunks
 
