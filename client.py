@@ -58,6 +58,36 @@ def upload_file(file_path):
             client_socket.close()
         
 # DOWNLOAD
+def download_file(filename):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((HOST, PORT))
+        
+        # Send the request type
+        s.sendall("download".encode())
+        
+        # Send the file name
+        s.sendall(filename.encode())
+        
+        try:
+            # Receive the number of chunks
+            num_chunks = int(s.recv(1024).decode())
+        except ValueError:
+            print("Error: Invalid number of chunks received")
+            return
+        
+        chunks = []
+        for i in range(num_chunks):
+            chunk_filename = f"{filename}_part_{i}"
+            with open(chunk_filename, 'wb') as chunk_file:
+                chunk = s.recv(CHUNK_SIZE)
+                while len(chunk) < CHUNK_SIZE:
+                    chunk += s.recv(CHUNK_SIZE - len(chunk))
+                chunk_file.write(chunk)
+            chunks.append(chunk_filename)
+        
+        # Merge chunks into the final file
+        merge_chunks(chunks, filename)
+        print(f"File {filename} downloaded successfully")
 
 # access to browser
 def select_file_to_upload():
@@ -71,7 +101,7 @@ def select_file_to_upload():
 def select_file_to_download():
     file_name = simpledialog.askstring("Download", "Enter the filename to download:")
     if file_name:
-        #download_file(file_path)
+        download_file(file_name)
         print(f"File selected: {file_name}")
     else:
         print("No file selected to download.") 
