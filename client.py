@@ -58,7 +58,38 @@ def upload_file(file_path):
             client_socket.close()
         
 # DOWNLOAD
-
+def download_file(filename):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+        client_socket.connect((HOST, PORT))
+        
+        # Send the request type
+        client_socket.sendall("download".encode())
+        
+        # Send the file name
+        client_socket.sendall(filename.encode())
+        
+        try:
+            # Receive the number of chunks
+            num_chunks = int(client_socket.recv(1024).decode())
+        except ValueError:
+            print("Error: Invalid number of chunks received")
+            return
+        
+        chunks = []
+        for i in range(num_chunks):
+            chunk_filename = os.path.join(DOWNLOAD_FOLDER, f"{filename}_part_{i}")
+            with open(chunk_filename, 'wb') as chunk_file:
+                chunk = client_socket.recv(CHUNK_SIZE)
+                while len(chunk) < CHUNK_SIZE:
+                    chunk += client_socket.recv(CHUNK_SIZE - len(chunk))
+                chunk_file.write(chunk)
+            chunks.append(chunk_filename)
+        
+        # Merge chunks into the final file
+        output_file = os.path.join(DOWNLOAD_FOLDER, filename)
+        merge_chunks(chunks, output_file)
+        print(f"File {filename} downloaded successfully")
+        
 # access to browser
 def select_file_to_upload():
     file_path = filedialog.askopenfilename()
