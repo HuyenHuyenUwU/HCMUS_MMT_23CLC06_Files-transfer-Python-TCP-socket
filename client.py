@@ -155,7 +155,7 @@ def main():
     upload_button.pack()
     
     download_button = tk.Button(root, text = "Download file", command = select_file_to_download)
-    download_button.pack()
+    download_button.pack() 
     
     root.mainloop()
     
