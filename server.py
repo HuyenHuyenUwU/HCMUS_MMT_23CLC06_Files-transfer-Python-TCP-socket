@@ -24,7 +24,7 @@ def handle_client(conn, addr):
             
         elif request_type == 'download':
             file_name = conn.recv(1024).decode()
-            #handle_download(conn, file_name)
+            handle_download(conn, file_name)
     
     except socket.error as E:
         print(f"Socket error: {E}")
@@ -82,6 +82,33 @@ def handle_upload(conn, file_name, num_chunks):
         print(f"Error writing to file: {E}")
     except Exception as E:
         print(f"Error: {E}") 
+
+def handle_download(conn, file_name):
+    try:
+        if os.path.exists(file_name):
+            # Send the file size and number of chunks
+            file_size = os.path.getsize(file_name)
+            num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
+            conn.sendall(f"{num_chunks}".encode())
+
+            # Send the file in chunks
+            with open(file_name, 'rb') as f:
+                for _ in range(num_chunks):
+                    chunk = f.read(CHUNK_SIZE)
+                    conn.sendall(chunk)
+            print(f"File {file_name} sent to client.")
+        else:
+            conn.sendall(b"ERROR: File not found")
+            print(f"Error: File {file_name} not found.")
+    except FileNotFoundError:
+        conn.sendall(b"ERROR: File not found")
+        print(f"Error: File {file_name} not found.")
+    except OSError as e:
+        conn.sendall(b"ERROR: Server encountered an issue reading the file")
+        print(f"OS error: {e}")
+    except Exception as e:
+        conn.sendall(b"ERROR: An unexpected error occurred")
+        print(f"Unexpected error: {e}")
         
 # helper functions
 def split_file(file_path, chunk_size):
