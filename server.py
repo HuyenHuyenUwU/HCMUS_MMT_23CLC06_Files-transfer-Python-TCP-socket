@@ -10,21 +10,42 @@ PORT = 9999
 CHUNK_SIZE = 1024
 UPLOAD_FOLDER = 'Server_data'
 
+# tranh loi Unknown request type
+# data gom: <request_type><file_info>
+#   <file_info> gom:
+#       upload: <file_name><num_chunks>
+#       download: <file_name>
+def receive_request_type_and_file_info(conn):
+    data = conn.recv(100).decode().strip()
+    
+    if data.startswith('upload'):
+        return 'upload', data[len('upload'):]
+    elif data.startswith('download'):
+        return 'download', data[len('download'):]
+    else:
+        return None, None
+    
 # handle client
 def handle_client(conn, addr):
     print(f"Connected by {addr}")
     try:
-        request_type = conn.recv(1024).decode()
+        request_type, file_info = receive_request_type_and_file_info(conn) # su dung ham receive_request_type() o day
+        print(f"Request: {request_type}")
+        print(f"File info: {file_info}")
     
-        if request_type == 'upload':
-            file_info = conn.recv(1024).decode()
-            file_name, num_chunks = file_info.split(':')
+        if request_type == 'upload':  
+            file_name, num_chunks = file_info.strip().split(':')
             num_chunks = int(num_chunks)
+            print(f"FileUploadname: {file_name}, num_chunks: {num_chunks}")
             handle_upload(conn, file_name, num_chunks)
             
         elif request_type == 'download':
-            file_name = conn.recv(1024).decode()
+            file_name = file_info.strip()
+            print(f"FileDownloadname: {file_name}")
             handle_download(conn, file_name)
+            
+        else:
+            print(f"Unknown request type: {request_type}")
     
     except socket.error as E:
         print(f"Socket error: {E}")
@@ -52,6 +73,8 @@ def handle_upload(conn, file_name, num_chunks):
             # Create a unique path for each chunk file
             chunk_path = f"chunk_{i+1}.bin" # binary files
             chunk_path = os.path.join(UPLOAD_FOLDER, chunk_path)
+            print(f"Chunk path of chunk_{i+1}.bin: {chunk_path}")
+            
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk)
             chunks.append(chunk_path)
@@ -60,6 +83,7 @@ def handle_upload(conn, file_name, num_chunks):
         # Merge chunks into output file
         output_file_path = os.path.join(UPLOAD_FOLDER, file_name)
         merge_chunks(chunks, output_file_path)
+        print(f"Merge file success. New file path is: {output_file_path}")
         
         # delete remain files in chunks[]
         for chunk_path in chunks:
@@ -76,30 +100,34 @@ def handle_upload(conn, file_name, num_chunks):
         print(f"Error writing to file: {E}")
     except Exception as E:
         print(f"Error: {E}")
-    except socket.error as E:
-        print(f"Socket error: {E}")
-    except OSError as E:
-        print(f"Error writing to file: {E}")
-    except Exception as E:
-        print(f"Error: {E}") 
 
 def handle_download(conn, file_name):
     try:
         if os.path.exists(file_name):
+            print(f"Filename: {file_name}")
             # Send the file size and number of chunks
             file_size = os.path.getsize(file_name)
+            print(f"File size: {file_size}")
+            
             num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
-            conn.sendall(f"{num_chunks}".encode())
+            print(f"Num of chunks: {num_chunks}")
+            
+            conn.sendall(str(num_chunks).encode())
+            print(f"send: {num_chunks}")
 
             # Send the file in chunks
             with open(file_name, 'rb') as f:
-                for _ in range(num_chunks):
+                for i in range(num_chunks):
                     chunk = f.read(CHUNK_SIZE)
                     conn.sendall(chunk)
+                    print(f"Send chunk {i+1}/{num_chunks}")
+                    
+                    
             print(f"File {file_name} sent to client.")
         else:
             conn.sendall(b"ERROR: File not found")
             print(f"Error: File {file_name} not found.")
+            
     except FileNotFoundError:
         conn.sendall(b"ERROR: File not found")
         print(f"Error: File {file_name} not found.")
@@ -116,7 +144,6 @@ def split_file(file_path, chunk_size):
     chunks = []
     # open the file in read-binary mode
     with open(file_path, 'rb') as file:
-        chunk_num = 0
         # read the file chunks-by-chunks
         while True:
             chunk = file.read(chunk_size)
@@ -127,7 +154,6 @@ def split_file(file_path, chunk_size):
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk)
                 chunks.append(chunk_path)
-                chunk_num += 1
     # return list of chunk_path
     return chunks
 
