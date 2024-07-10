@@ -140,7 +140,8 @@ def main():
     
     upload_button = tk.Button(root, text = "Upload file", command = select_file_to_upload)
     upload_button.pack()
-    
+
+    # download_button = tk.Button(root, text = "Download file, command = select_file_to_download)
     # download_button = tk.Button(root, text = "Download file", command = select_file_to_download()).pack
     # download_button.pack()
     
