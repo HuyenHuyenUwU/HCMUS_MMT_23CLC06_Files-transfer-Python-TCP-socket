@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, simpledialog, ttk
 
-# constants
+# CONSTANTS
 HOST = 'localhost'
 PORT = 9999
 CHUNK_SIZE = 1024
@@ -25,28 +25,33 @@ def upload_file(file_path):
             print(f"Host: {HOST}, Port: {PORT}")
             
             # send request type
-            client_socket.sendall("upload".encode())
+            client_socket.sendall("upload\n".encode())
             print(f"Send request to server: {"upload".encode()}")
             
             # send file info: {file_path}:{num_chunks}
-            file_info = f"{os.path.basename(file_path)}:{num_chunks}"
+            file_info = f"{os.path.basename(file_path)}:{num_chunks}\n"
             client_socket.sendall(file_info.encode())
             print(f"Send file info to server: {file_info.encode()}")
             
             # send each chunk
-            i = 0
             for chunk_path in chunks:
                 try:
                     with open(chunk_path, 'rb') as chunk_file:
+                        chunk_data = chunk_file.read()
+                        chunk_size = len(chunk_data)
+                        
+                        # send chunk size
+                        client_socket.sendall(f"{chunk_size}\n".encode())
+                        
+                        # wait for acknowledgment from server
+                        ack = client_socket.recv(1024).decode().strip()
+                        if ack != "OK":
+                            raise Exception("Failed to receive acknowledgment from server.")
+                        
                         # send chunk data
-                        while True:
-                            chunk_data = chunk_file.read(CHUNK_SIZE)
-                            if not chunk_data:
-                                break
-                            client_socket.sendall(chunk_data)
-                            
-                        i += 1
-                        print(f"Send chunk file: {i}/{num_chunks}")
+                        client_socket.sendall(chunk_data)
+                        
+                        print(f"Send chunk file: {chunk_path}")
                             
                 except OSError as E:
                     print(f"Error reading chunk file: {E}")
@@ -58,51 +63,68 @@ def upload_file(file_path):
     except Exception as E:
         print(f"Error: {E}")
         
-    # finally:
-    #     # close the connection
-    #     if 'client_socket'.local():
-    #         client_socket.close()
+    finally:
+        for chunk in chunks:
+            os.remove(chunk)
         
 # DOWNLOAD
 def download_file(filename):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        print(f"Host: {HOST}, Port: {PORT}")
-        
-        # Send the request type
-        s.sendall("download".encode())
-        print(f"Send request to server: {"download".encode()}")
-        
-        # Send the file name
-        s.sendall(filename.encode())
-        print(f"Send filename to server: {filename.encode()}")
-        
-        try:
+    try:
+        #create socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            # connect to server
+            client_socket.connect((HOST, PORT))
+            print(f"Host: {HOST}, Port: {PORT}")
+            
+            # Send the request type
+            client_socket.sendall("download".encode())
+            print(f"Send request to server: {"download".encode()}")
+            
+            # Send the file name
+            client_socket.sendall(filename.encode())
+            print(f"Send filename to server: {filename.encode()}")
+            
             # Receive the number of chunks
-            num_chunks = int(s.recv(1024).decode())
+            num_chunks = int(client_socket.recv(1024).decode())
             print(f"Num of chunks: {num_chunks}")
             
-        except ValueError:
-            print("Error: Invalid number of chunks received")
-            return
-        
-        chunks = []
-        for i in range(num_chunks):
-            chunk_filename = f"{filename}_part_{i}"
-            with open(chunk_filename, 'wb') as chunk_file:
-                chunk = s.recv(CHUNK_SIZE)
-                while len(chunk) < CHUNK_SIZE:
-                    chunk += s.recv(CHUNK_SIZE - len(chunk))
-                chunk_file.write(chunk)
-            chunks.append(chunk_filename)
-            print(f"Received chunk {i+1}/{num_chunks}")
-        
-        # Merge chunks into the final file
-        merge_chunks(chunks, filename)
-        print(f"File {filename} downloaded successfully")
-        print(f"Merge file success. New filename is: {filename}")
+            # Send acknowledgment
+            client_socket.sendall(b"OK")
+                
+            chunks = []
+            for i in range(num_chunks):
+                # Receive chunk size
+                chunk_size = int(client_socket.recv(1024).decode().strip())
+                client_socket.sendall(b"OK")
+                    
+                # Receive chunk data
+                chunk = b''
+                while len(chunk) < chunk_size:
+                    received_data = client_socket.recv(chunk_size - len(chunk))
+                    if not received_data:
+                        raise ConnectionResetError("Connection closed before receiving the entire chunk.")
+                    chunk += received_data
+                    
+                if len(chunk) != chunk_size:
+                    raise ValueError(f"Chunk {i+1} received with incorrect size: {len(chunk)} bytes")
+                    
+                chunk_filename = f"{filename}_part_{i}"
+                with open(chunk_filename, 'wb') as chunk_file:
+                    chunk_file.write(chunk)
+                chunks.append(chunk_filename)
+                print(f"Received chunk {i+1}/{num_chunks}")
+                
+            # Merge chunks into the final file
+            output_file = os.path.join(DOWNLOAD_FOLDER, filename)
+            merge_chunks(chunks, output_file)
+            print(f"File {filename} downloaded successfully")
     
-# access to browser
+    except socket.error as E:
+        print(f"Socket error: {E}")
+    except Exception as E:
+        print(f"Error: {E}")
+    
+# ACCESS TO BROWSER
 def select_file_to_upload():
     file_path = filedialog.askopenfilename()
     if file_path:
@@ -120,7 +142,7 @@ def select_file_to_download():
         print("No file selected to download.") 
         
 
-# helper functions
+# HELPER FUNCTIONS
 def split_file(file_path, chunk_size):
     # intialize a list to stores chunks
     chunks = []
@@ -140,10 +162,15 @@ def split_file(file_path, chunk_size):
     return chunks
 
 def merge_chunks(chunks, output_file):
+    # Open the output file in write-binary mode ('wb')
     with open(output_file, 'wb') as out_file:
+        # Iterate over the list of chunk files
         for chunk_file in chunks:
+            # Open the current chunk file in read-binary mode ('rb')
             with open(chunk_file, 'rb') as chunk:
+                # Read the contents of the chunk file and write it to the output file
                 out_file.write(chunk.read())
+            # Remove the chunk file after it has been written to the output file
             os.remove(chunk_file)
 
 def main():
@@ -151,9 +178,11 @@ def main():
     root = tk.Tk() # main window
     root.title("File transfer Application")
     
+    # upload button
     upload_button = tk.Button(root, text = "Upload file", command = select_file_to_upload)
     upload_button.pack()
     
+    # download button
     download_button = tk.Button(root, text = "Download file", command = select_file_to_download)
     download_button.pack() 
     
