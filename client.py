@@ -1,7 +1,8 @@
 import os
 import socket
 import threading
-import tkinter as tk
+#import tkinter as tk
+from tkinter import *
 from tkinter import filedialog, simpledialog, ttk
 
 # CONSTANTS
