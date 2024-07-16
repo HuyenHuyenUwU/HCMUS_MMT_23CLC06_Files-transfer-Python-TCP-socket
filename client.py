@@ -25,11 +25,11 @@ def upload_file(file_path):
             print(f"Host: {HOST}, Port: {PORT}")
             
             # send request type
-            client_socket.sendall("upload\n".encode())
+            client_socket.sendall("upload".encode())
             print(f"Send request to server: {"upload".encode()}")
             
             # send file info: {file_path}:{num_chunks}
-            file_info = f"{os.path.basename(file_path)}:{num_chunks}\n"
+            file_info = f"{os.path.basename(file_path)}:{num_chunks}"
             client_socket.sendall(file_info.encode())
             print(f"Send file info to server: {file_info.encode()}")
             
