@@ -126,7 +126,15 @@ def download_file(filename):
     
 # ACCESS TO BROWSER
 def select_file_to_upload():
-    file_path = filedialog.askopenfilename()
+    window=Toplevel(root)
+    window.title("Upload")
+    window.geometry("300x250+300+300")
+    window.configure(bg="linen")
+    window.resizable(False,False)
+    
+    file_path = filedialog.askopenfilename(initialdir=os.getcwd(),
+                                            title='Select Image File',
+                                            filetype=(('file_type','*.txt'),('all files','*.*')))
     if file_path:
         upload_file(file_path)
         print(f"File selected: {file_path}")
@@ -134,6 +142,11 @@ def select_file_to_upload():
         print("No file selected to upload.")
         
 def select_file_to_download():
+    main=Toplevel(root)
+    main.title("Download")
+    main.configure("300x250+300+300")
+    main.resizable(False,False)
+    
     file_name = simpledialog.askstring("Download", "Enter the filename to download:")
     if file_name:
         download_file(file_name)
@@ -175,16 +188,26 @@ def merge_chunks(chunks, output_file):
 
 def main():
     global root
-    root = tk.Tk() # main window
-    root.title("File transfer Application")
-    
-    # upload button
-    upload_button = tk.Button(root, text = "Upload file", command = select_file_to_upload)
-    upload_button.pack()
-    
-    # download button
-    download_button = tk.Button(root, text = "Download file", command = select_file_to_download)
-    download_button.pack() 
+    root = Tk()
+    root.title("File Transfer Application")
+    root.geometry("300x250+300+300")
+    root.configure(bg="linen")
+    root.resizable(False,False)
+
+    #App icon 
+    image_icon = PhotoImage(file="Image/icon1.png")
+    root.iconphoto(False,image_icon)
+
+
+    upload_image = PhotoImage(file="Image/upload.png")
+    upload = Button(root,image=upload_image,bg="linen", bd=0,command=select_file_to_upload)
+    upload.place(x=50,y=50)
+    Label(root,text="Upload",font=('arial', 16, 'bold'),bg='linen').place(x=45,y=125)
+
+    download_image = PhotoImage(file="Image/download.png")
+    download = Button(root,image=download_image,bg="linen",bd=0,command=select_file_to_download)
+    download.place(x=185,y=50)
+    Label(root,text="Download",font=('arial', 16, 'bold'),bg='linen').place(x=165,y=125)
     
     root.mainloop()
     
