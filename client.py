@@ -134,11 +134,13 @@ def download_files(file_name):
     
 # ACCESS TO BROWSER
 def select_file_to_upload():
+    '''
     window=Toplevel(root)
     window.title("Upload")
     window.geometry("300x250+300+300")
     window.configure(bg="linen")
     window.resizable(False,False)
+    '''
     
     file_path = filedialog.askopenfilename(initialdir=os.getcwd(),
                                             title='Select Image File',
@@ -150,10 +152,12 @@ def select_file_to_upload():
         print("No file selected to upload.")
         
 def select_file_to_download():
+    '''
     main=Toplevel(root)
     main.title("Download")
     main.configure("300x250+300+300")
     main.resizable(False,False)
+    '''
     
     file_name = simpledialog.askstring("Download", "Enter the filename to download:")
     if file_name:
