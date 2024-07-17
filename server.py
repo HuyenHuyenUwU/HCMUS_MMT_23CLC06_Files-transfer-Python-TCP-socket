@@ -12,8 +12,8 @@ UPLOAD_FOLDER = 'Server_data'
 
 # HANDLE REQUEST TYPE AND FILE INFO
 def receive_request_type_and_file_info(conn):
-    data = conn.recv(100).decode().strip()
-    
+    data = conn.recv(1024).decode().strip()
+    conn.sendall("OK".encode())
     if data.startswith('upload'):
         return 'upload', data[len('upload'):]
     elif data.startswith('download'):
@@ -55,98 +55,93 @@ def handle_client(conn, addr):
         print(f"Error: {E}")
     finally:
         conn.close()
-        
+
+#UPLOAD
+def receive_chunk(conn, socket_lock, chunk_paths, file_name):
+    try:
+        with socket_lock:
+            chunk_info = conn.recv(1024).decode().strip()
+            print(f"chunk_info: {chunk_info}\n")
+            chunk_index, chunk_size = map(int, chunk_info.split(':'))
+            print(f"chunk_index {chunk_index}\n")
+            print(f"chunk_size {chunk_size}\n")
+            conn.sendall("OK".encode())
+            chunk_data = b''
+            while len(chunk_data) < chunk_size:
+                chunk_data += conn.recv(min(1024, chunk_size - len(chunk_data)))
+
+            chunk_path = os.path.join(UPLOAD_FOLDER, f"{file_name}_chunk_{chunk_index}")
+            with open(chunk_path, 'wb') as chunk_file:
+                chunk_file.write(chunk_data)
+
+            conn.sendall("OK".encode())
+            chunk_paths[chunk_index] = chunk_path  # Store chunk path at correct index
+    except Exception as e:
+        print(f"Error receiving chunk: {e}")
+
 def handle_upload(conn, file_name, num_chunks):
     try:
-        chunks = []
-        # Receive chunks from client
-        for i in range(num_chunks):
-            # Receive chunk size
-            chunk_size = int(conn.recv(1024).decode().strip())
-            conn.sendall(b"OK")
-            
-            # Receive chunk data
-            chunk = b''
-            while len(chunk) < chunk_size:
-                received_data = conn.recv(chunk_size - len(chunk))
-                if not received_data:
-                    raise ConnectionResetError("Connection closed before receiving the entire chunk.")
-                chunk += received_data
-            
-            if len(chunk) != chunk_size:
-                raise ValueError(f"Chunk {i+1} received with incorrect size: {len(chunk)} bytes")
-                
-            # Create a unique path for each chunk file
-            chunk_path = f"chunk_{i+1}.bin" # binary files
-            chunk_path = os.path.join(UPLOAD_FOLDER, chunk_path)
-            print(f"Chunk path of chunk_{i+1}.bin: {chunk_path}")
-            
-            with open(chunk_path, 'wb') as chunk_file:
-                chunk_file.write(chunk)
-            chunks.append(chunk_path)
-            print(f"Received chunk {i+1}/{num_chunks}")
+        chunk_paths = [None] * num_chunks  # Pre-allocate list for chunk paths
+        # Create a thread to receive each chunk
+        threads = []
+        for _ in range(num_chunks):
+            thread = threading.Thread(target=receive_chunk, args=(conn, socket_lock, chunk_paths, file_name))
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
         
-        # Merge chunks into output file
-        output_file_path = os.path.join(UPLOAD_FOLDER, file_name)
-        merge_chunks(chunks, output_file_path)
-        print(f"Merge file success. New file path is: {output_file_path}")
-                
-        print(f"File {file_name} received and merged successfully")
-        conn.sendall(b"OK")
-        
-    except socket.error as E:
-        print(f"Socket error: {E}")
-    except OSError as E:
-        print(f"Error writing to file: {E}")
-    except Exception as E:
-        print(f"Error: {E}")
+        if None not in chunk_paths:
+            output_file = os.path.join(UPLOAD_FOLDER, file_name)
+            merge_chunks(chunk_paths, output_file)
+            print(f"File {file_name} uploaded successfully.")
+
+    except Exception as e:
+        print(f"Error handling upload: {e}")
+
+#DOWNLOAD
+def send_chunk(conn, chunk_index, chunk_path):
+            try:
+                with socket_lock:
+                    chunk_size = os.path.getsize(chunk_path)
+                    conn.sendall(f"{chunk_index}:{chunk_size}\n".encode())
+                    ack = conn.recv(10).decode().strip()
+                    if ack != 'OK':
+                        raise Exception("Failed to receive acknowledgment from client.")
+
+                    with open(chunk_path, 'rb') as chunk_file:
+                        chunk_data = chunk_file.read()
+                        conn.sendall(chunk_data)
+
+                    ack = conn.recv(10).decode().strip()
+                    if ack != 'OK':
+                        raise Exception("Failed to receive acknowledgment from client.")
+            except Exception as e:
+                print(f"Error sending chunk {chunk_index}: {e}")
+
 
 def handle_download(conn, file_name):
     try:
         file_path = os.path.join(UPLOAD_FOLDER, file_name)
-        if os.path.exists(file_path):
-            print(f"Filename: {file_name}")
-            file_size = os.path.getsize(file_path)
-            num_chunks = (file_size + CHUNK_SIZE - 1) // CHUNK_SIZE
-            print(f"Num of chunks: {num_chunks}")
-            conn.sendall(f"{num_chunks}\n".encode())
-            print(f"send: {num_chunks}")
-            
-            # Wait for acknowledgment
-            ack = conn.recv(1024).decode().strip()
-            if ack != "OK":
-                raise Exception("Failed to receive acknowledgment from client.")
-            
-            with open(file_path, 'rb') as f:
-                for i in range(num_chunks):
-                    chunk = f.read(CHUNK_SIZE)
-                    chunk_size = len(chunk)
-                    
-                    # Send chunk size
-                    conn.sendall(f"{chunk_size}\n".encode())
-                    
-                    # Wait for acknowledgment
-                    ack = conn.recv(1024).decode().strip()
-                    if ack != "OK":
-                        raise Exception("Failed to receive acknowledgment from client.")
-                    
-                    # Send chunk data
-                    conn.sendall(chunk)
-                    print(f"Send chunk {i+1}/{num_chunks}")
-                    
-            print(f"File {file_name} sent to client.")
-        else:
-            conn.sendall(b"ERROR: File not found")
-            print(f"Error: File {file_name} not found.")
-    except FileNotFoundError:
-        conn.sendall(b"ERROR: File not found")
-        print(f"Error: File {file_name} not found.")
-    except OSError as e:
-        conn.sendall(b"ERROR: Server encountered an issue reading the file")
-        print(f"OS error: {e}")
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File {file_name} not found.")
+
+        chunks = split_file(file_path, CHUNK_SIZE)
+        num_chunks = len(chunks)
+        conn.sendall(f"{num_chunks}".encode())        
+        threads = []
+        for index, chunk_path in enumerate(chunks):
+            thread = threading.Thread(target=send_chunk, args=(conn, index, chunk_path))
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
+
     except Exception as e:
-        conn.sendall(b"ERROR: An unexpected error occurred")
-        print(f"Unexpected error: {e}")
+        print(f"Error handling download: {e}")
+    finally:
+        for chunk in chunks:
+            os.remove(chunk)
         
 # helper functions
 def split_file(file_path, chunk_size):
