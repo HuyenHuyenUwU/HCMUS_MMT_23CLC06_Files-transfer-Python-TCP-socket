@@ -10,66 +10,85 @@ HOST = 'localhost'
 PORT = 9999
 CHUNK_SIZE = 1024
 DOWNLOAD_FOLDER = 'Client_data'
+socket_lock = threading.Lock()
 
 # UPLOAD
+def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock):
+    try:
+        with socket_lock:
+            client_socket.sendall(f"{chunk_index}:{os.path.getsize(chunk_path)}\n".encode())
+            print(f"{chunk_index}:{os.path.getsize(chunk_path)}".encode())
+            ack = client_socket.recv(1024).decode().strip()
+            if ack != "OK":
+                raise Exception("Failed to receive acknowledgment from server.")
+
+            with open(chunk_path, 'rb') as chunk_file:
+                chunk_data = chunk_file.read()
+                client_socket.sendall(chunk_data)
+
+            ack = client_socket.recv(1024).decode().strip()
+            if ack != "OK":
+                raise Exception("Failed to receive acknowledgment from server.")
+    except Exception as e:
+        print(f"Error sending chunk {chunk_path}: {e}")
+
 def upload_file(file_path):
     try:
-        # split file into chunks (chunks[] contain file_path)
         chunks = split_file(file_path, CHUNK_SIZE)
         num_chunks = len(chunks)
         print(f"Num of chunks: {num_chunks}")
-        
-        # create socket
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-            # connect to server
-            client_socket.connect((HOST,PORT))
-            print(f"Host: {HOST}, Port: {PORT}")
-            
-            # send request type
+            client_socket.connect((HOST, PORT))
             client_socket.sendall("upload".encode())
-            print(f"Send request to server: {"upload".encode()}")
-            
-            # send file info: {file_path}:{num_chunks}
             file_info = f"{os.path.basename(file_path)}:{num_chunks}"
             client_socket.sendall(file_info.encode())
-            print(f"Send file info to server: {file_info.encode()}")
-            
-            # send each chunk
-            for chunk_path in chunks:
-                try:
-                    with open(chunk_path, 'rb') as chunk_file:
-                        chunk_data = chunk_file.read()
-                        chunk_size = len(chunk_data)
-                        
-                        # send chunk size
-                        client_socket.sendall(f"{chunk_size}\n".encode())
-                        
-                        # wait for acknowledgment from server
-                        ack = client_socket.recv(1024).decode().strip()
-                        if ack != "OK":
-                            raise Exception("Failed to receive acknowledgment from server.")
-                        
-                        # send chunk data
-                        client_socket.sendall(chunk_data)
-                        
-                        print(f"Send chunk file: {chunk_path}")
-                            
-                except OSError as E:
-                    print(f"Error reading chunk file: {E}")
-                    continue
-                
-            print(f"File {file_path} uploaded successfully.")
-    except socket.error as E:
-        print(f"Socket error: {E}")
-    except Exception as E:
-        print(f"Error: {E}")
-        
+            ack = client_socket.recv(1024).decode().strip()
+            if ack != "OK":
+                raise Exception("Failed to receive acknowledgment from server.")
+            print(file_info.encode())
+
+            threads = []
+            for index, chunk_path in enumerate(chunks):
+                thread = threading.Thread(target=upload_chunk, args=(index, chunk_path, client_socket, socket_lock))
+                threads.append(thread)
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+    except Exception as e:
+        print(f"Error uploading file {file_path}: {e}")
     finally:
         for chunk in chunks:
             os.remove(chunk)
+
         
 # DOWNLOAD
-def download_file(filename):
+def download_file(file_name, client_socket, chunk_paths):
+    try:
+        with socket_lock:
+            chunk_info = client_socket.recv(1024).decode().strip()
+            print(f"chunk_info: {chunk_info}\n")
+            chunk_index, chunk_size = map(int, chunk_info.split(':'))
+            print(f"chunk_index: {chunk_index}\n")
+            print(f"chunk_size: {chunk_size}\n")
+            client_socket.send('OK'.encode())
+
+            chunk_data = b''
+            while len(chunk_data) < chunk_size:
+                chunk_data += client_socket.recv(min(1024, chunk_size - len(chunk_data)))
+
+            chunk_path = os.path.join(DOWNLOAD_FOLDER, f"{file_name}_chunk_{chunk_index}")
+            with open(chunk_path, 'wb') as chunk_file:
+                chunk_file.write(chunk_data)
+
+            client_socket.send('OK'.encode())
+            chunk_paths.append(chunk_path)
+
+    except Exception as e:
+        print(f"Error downloading file {file_name}: {e}")
+
+def download_files(file_name):
     try:
         #create socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
@@ -82,44 +101,32 @@ def download_file(filename):
             print(f"Send request to server: {"download".encode()}")
             
             # Send the file name
-            client_socket.sendall(filename.encode())
-            print(f"Send filename to server: {filename.encode()}")
-            
+            client_socket.sendall(file_name.encode())
+            print(f"Send filename to server: {file_name.encode()}")
+            ack = client_socket.recv(1024).decode().strip()
+            if ack != "OK":
+                raise Exception("Failed to receive acknowledgment from server.")
             # Receive the number of chunks
             num_chunks = int(client_socket.recv(1024).decode())
             print(f"Num of chunks: {num_chunks}")
             
             # Send acknowledgment
-            client_socket.sendall(b"OK")
-                
-            chunks = []
-            for i in range(num_chunks):
-                # Receive chunk size
-                chunk_size = int(client_socket.recv(1024).decode().strip())
-                client_socket.sendall(b"OK")
-                    
-                # Receive chunk data
-                chunk = b''
-                while len(chunk) < chunk_size:
-                    received_data = client_socket.recv(chunk_size - len(chunk))
-                    if not received_data:
-                        raise ConnectionResetError("Connection closed before receiving the entire chunk.")
-                    chunk += received_data
-                    
-                if len(chunk) != chunk_size:
-                    raise ValueError(f"Chunk {i+1} received with incorrect size: {len(chunk)} bytes")
-                    
-                chunk_filename = f"{filename}_part_{i}"
-                with open(chunk_filename, 'wb') as chunk_file:
-                    chunk_file.write(chunk)
-                chunks.append(chunk_filename)
-                print(f"Received chunk {i+1}/{num_chunks}")
-                
-            # Merge chunks into the final file
-            output_file = os.path.join(DOWNLOAD_FOLDER, filename)
-            merge_chunks(chunks, output_file)
-            print(f"File {filename} downloaded successfully")
-    
+            chunk_paths = []
+
+            threads = []
+            for _ in range(num_chunks):
+                thread = threading.Thread(target=download_file, args=(file_name, client_socket, chunk_paths))
+                threads.append(thread)
+                thread.start()
+            for thread in threads:
+                thread.join()
+            
+            if None not in chunk_paths:
+                output_file = os.path.join(DOWNLOAD_FOLDER, file_name)
+                merge_chunks(chunk_paths, output_file)
+                print(f"File {file_name} downloaded successfully.")
+
+
     except socket.error as E:
         print(f"Socket error: {E}")
     except Exception as E:
@@ -150,7 +157,7 @@ def select_file_to_download():
     
     file_name = simpledialog.askstring("Download", "Enter the filename to download:")
     if file_name:
-        download_file(file_name)
+        download_files(file_name)
         print(f"File selected: {file_name}")
     else:
         print("No file selected to download.") 
