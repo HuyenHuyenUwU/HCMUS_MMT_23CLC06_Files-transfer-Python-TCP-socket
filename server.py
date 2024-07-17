@@ -9,6 +9,7 @@ HOST = 'localhost'
 PORT = 9999
 CHUNK_SIZE = 1024
 UPLOAD_FOLDER = 'Server_data'
+socket_lock = threading.Lock()
 
 # HANDLE REQUEST TYPE AND FILE INFO
 def receive_request_type_and_file_info(conn):
