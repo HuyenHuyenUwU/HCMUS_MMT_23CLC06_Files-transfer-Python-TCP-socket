@@ -13,11 +13,11 @@ DOWNLOAD_FOLDER = 'Client_data'
 socket_lock = threading.Lock()
 
 # UPLOAD
-def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock):
+def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock, num_chunks):
     try:
         with socket_lock:
             client_socket.sendall(f"{chunk_index}:{os.path.getsize(chunk_path)}\n".encode())
-            print(f"{chunk_index}:{os.path.getsize(chunk_path)}".encode())
+            #print(f"{chunk_index}:{os.path.getsize(chunk_path)}".encode())
             ack = client_socket.recv(1024).decode().strip()
             if ack != "OK":
                 raise Exception("Failed to receive acknowledgment from server.")
@@ -29,6 +29,8 @@ def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock):
             ack = client_socket.recv(1024).decode().strip()
             if ack != "OK":
                 raise Exception("Failed to receive acknowledgment from server.")
+            else:
+                print(f"sent chunk_{chunk_index} size: {os.path.getsize(chunk_path)} ({chunk_index + 1}/{num_chunks})")
     except Exception as e:
         print(f"Error sending chunk {chunk_path}: {e}")
 
@@ -46,15 +48,19 @@ def upload_file(file_path):
             ack = client_socket.recv(1024).decode().strip()
             if ack != "OK":
                 raise Exception("Failed to receive acknowledgment from server.")
-            print(file_info.encode())
 
             threads = []
             for index, chunk_path in enumerate(chunks):
-                thread = threading.Thread(target=upload_chunk, args=(index, chunk_path, client_socket, socket_lock))
+                thread = threading.Thread(target=upload_chunk, args=(index, chunk_path, client_socket, socket_lock, num_chunks))
                 threads.append(thread)
                 thread.start()
             for thread in threads:
                 thread.join()
+            ack = client_socket.recv(1024).decode().strip()
+            if ack != "OK":
+                raise Exception("Failed to receive acknowledgment from server.")
+            else:
+                print(f"File {file_path} uploaded successfully.")
 
     except Exception as e:
         print(f"Error uploading file {file_path}: {e}")
@@ -64,14 +70,11 @@ def upload_file(file_path):
 
         
 # DOWNLOAD
-def download_file(file_name, client_socket, chunk_paths):
+def download_chunk(file_name, client_socket, chunk_paths, num_chunks):
     try:
         with socket_lock:
             chunk_info = client_socket.recv(1024).decode().strip()
-            print(f"chunk_info: {chunk_info}\n")
             chunk_index, chunk_size = map(int, chunk_info.split(':'))
-            print(f"chunk_index: {chunk_index}\n")
-            print(f"chunk_size: {chunk_size}\n")
             client_socket.send('OK'.encode())
 
             chunk_data = b''
@@ -83,12 +86,13 @@ def download_file(file_name, client_socket, chunk_paths):
                 chunk_file.write(chunk_data)
 
             client_socket.send('OK'.encode())
+            print(f"Received chunk_{chunk_index} size: {chunk_size} ({chunk_index + 1}/{num_chunks})")
             chunk_paths.append(chunk_path)
 
     except Exception as e:
         print(f"Error downloading file {file_name}: {e}")
 
-def download_files(file_name):
+def download_file(file_name):
     try:
         #create socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
@@ -115,7 +119,7 @@ def download_files(file_name):
 
             threads = []
             for _ in range(num_chunks):
-                thread = threading.Thread(target=download_file, args=(file_name, client_socket, chunk_paths))
+                thread = threading.Thread(target=download_chunk, args=(file_name, client_socket, chunk_paths, num_chunks))
                 threads.append(thread)
                 thread.start()
             for thread in threads:
@@ -124,6 +128,7 @@ def download_files(file_name):
             if None not in chunk_paths:
                 output_file = os.path.join(DOWNLOAD_FOLDER, file_name)
                 merge_chunks(chunk_paths, output_file)
+                client_socket.send('OK'.encode())
                 print(f"File {file_name} downloaded successfully.")
 
 
@@ -161,7 +166,7 @@ def select_file_to_download():
     
     file_name = simpledialog.askstring("Download", "Enter the filename to download:")
     if file_name:
-        download_files(file_name)
+        download_file(file_name)
         print(f"File selected: {file_name}")
     else:
         print("No file selected to download.") 
