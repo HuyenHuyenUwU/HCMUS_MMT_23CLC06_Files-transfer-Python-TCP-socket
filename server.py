@@ -58,14 +58,11 @@ def handle_client(conn, addr):
         conn.close()
 
 #UPLOAD
-def receive_chunk(conn, socket_lock, chunk_paths, file_name):
+def receive_chunk(conn, socket_lock, chunk_paths, file_name, num_chunks):
     try:
         with socket_lock:
             chunk_info = conn.recv(1024).decode().strip()
-            print(f"chunk_info: {chunk_info}\n")
             chunk_index, chunk_size = map(int, chunk_info.split(':'))
-            print(f"chunk_index {chunk_index}\n")
-            print(f"chunk_size {chunk_size}\n")
             conn.sendall("OK".encode())
             chunk_data = b''
             while len(chunk_data) < chunk_size:
@@ -76,6 +73,7 @@ def receive_chunk(conn, socket_lock, chunk_paths, file_name):
                 chunk_file.write(chunk_data)
 
             conn.sendall("OK".encode())
+            print(f"Received chunk_{chunk_index} size: {chunk_size} ({chunk_index + 1}/{num_chunks})")
             chunk_paths[chunk_index] = chunk_path  # Store chunk path at correct index
     except Exception as e:
         print(f"Error receiving chunk: {e}")
@@ -86,7 +84,7 @@ def handle_upload(conn, file_name, num_chunks):
         # Create a thread to receive each chunk
         threads = []
         for _ in range(num_chunks):
-            thread = threading.Thread(target=receive_chunk, args=(conn, socket_lock, chunk_paths, file_name))
+            thread = threading.Thread(target=receive_chunk, args=(conn, socket_lock, chunk_paths, file_name, num_chunks))
             threads.append(thread)
             thread.start()
         for thread in threads:
@@ -95,13 +93,14 @@ def handle_upload(conn, file_name, num_chunks):
         if None not in chunk_paths:
             output_file = os.path.join(UPLOAD_FOLDER, file_name)
             merge_chunks(chunk_paths, output_file)
+            conn.sendall("OK".encode())
             print(f"File {file_name} uploaded successfully.")
 
     except Exception as e:
         print(f"Error handling upload: {e}")
 
 #DOWNLOAD
-def send_chunk(conn, chunk_index, chunk_path):
+def send_chunk(conn, chunk_index, chunk_path, num_chunks):
             try:
                 with socket_lock:
                     chunk_size = os.path.getsize(chunk_path)
@@ -117,6 +116,8 @@ def send_chunk(conn, chunk_index, chunk_path):
                     ack = conn.recv(10).decode().strip()
                     if ack != 'OK':
                         raise Exception("Failed to receive acknowledgment from client.")
+                    else:
+                        print(f"sent chunk_{chunk_index} size: {os.path.getsize(chunk_path)} ({chunk_index + 1}/{num_chunks})")
             except Exception as e:
                 print(f"Error sending chunk {chunk_index}: {e}")
 
@@ -132,12 +133,16 @@ def handle_download(conn, file_name):
         conn.sendall(f"{num_chunks}".encode())        
         threads = []
         for index, chunk_path in enumerate(chunks):
-            thread = threading.Thread(target=send_chunk, args=(conn, index, chunk_path))
+            thread = threading.Thread(target=send_chunk, args=(conn, index, chunk_path, num_chunks))
             threads.append(thread)
             thread.start()
         for thread in threads:
             thread.join()
-
+        ack = conn.recv(10).decode().strip()
+        if ack != 'OK':
+            raise Exception("Failed to receive acknowledgment from client.")
+        else:
+            print(f"File {file_name} downloaded successfully.")
     except Exception as e:
         print(f"Error handling download: {e}")
     finally:
