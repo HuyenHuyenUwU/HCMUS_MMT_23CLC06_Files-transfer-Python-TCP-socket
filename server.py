@@ -7,7 +7,7 @@ from tkinter import filedialog, simpledialog, ttk
 # CONSTANTS
 HOST = 'localhost'
 PORT = 9999
-CHUNK_SIZE = 1024
+CHUNK_SIZE = 1024*1024
 UPLOAD_FOLDER = 'Server_data'
 socket_lock = threading.Lock()
 
