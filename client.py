@@ -1,15 +1,15 @@
 import os
 import socket
 import threading
-#import tkinter as tk
+import tkinter as tk
 from tkinter import *
 from tkinter import filedialog, simpledialog, ttk
 
 # CONSTANTS
 HOST = 'localhost'
 PORT = 9999
-CHUNK_SIZE = 1024*1024
-DOWNLOAD_FOLDER = 'Client_data'
+CHUNK_SIZE = 1024
+#DOWNLOAD_FOLDER = 'Client_data'
 socket_lock = threading.Lock()
 
 # UPLOAD
@@ -17,7 +17,6 @@ def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock, num_chunks
     try:
         with socket_lock:
             client_socket.sendall(f"{chunk_index}:{os.path.getsize(chunk_path)}\n".encode())
-            #print(f"{chunk_index}:{os.path.getsize(chunk_path)}".encode())
             ack = client_socket.recv(1024).decode().strip()
             if ack != "OK":
                 raise Exception("Failed to receive acknowledgment from server.")
@@ -70,7 +69,7 @@ def upload_file(file_path):
 
         
 # DOWNLOAD
-def download_chunk(file_name, client_socket, chunk_paths, num_chunks):
+def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_folder_path):
     try:
         with socket_lock:
             chunk_info = client_socket.recv(1024).decode().strip()
@@ -81,7 +80,7 @@ def download_chunk(file_name, client_socket, chunk_paths, num_chunks):
             while len(chunk_data) < chunk_size:
                 chunk_data += client_socket.recv(min(1024, chunk_size - len(chunk_data)))
 
-            chunk_path = os.path.join(DOWNLOAD_FOLDER, f"{file_name}_chunk_{chunk_index}")
+            chunk_path = os.path.join(download_folder_path, f"{file_name}_chunk_{chunk_index}")
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk_data)
 
@@ -113,20 +112,22 @@ def download_file(file_name):
             # Receive the number of chunks
             num_chunks = int(client_socket.recv(1024).decode())
             print(f"Num of chunks: {num_chunks}")
-            
+          # Mở hộp thoại lưu file
+            download_folder_path = filedialog.askdirectory()
             # Send acknowledgment
             chunk_paths = []
 
             threads = []
             for _ in range(num_chunks):
-                thread = threading.Thread(target=download_chunk, args=(file_name, client_socket, chunk_paths, num_chunks))
+                thread = threading.Thread(target=download_chunk, args=(file_name, client_socket, chunk_paths, num_chunks, download_folder_path))
                 threads.append(thread)
                 thread.start()
             for thread in threads:
                 thread.join()
             
             if None not in chunk_paths:
-                output_file = os.path.join(DOWNLOAD_FOLDER, file_name)
+                
+                output_file = os.path.join(download_folder_path, file_name)
                 merge_chunks(chunk_paths, output_file)
                 client_socket.send('OK'.encode())
                 print(f"File {file_name} downloaded successfully.")
