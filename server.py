@@ -3,22 +3,26 @@ import socket
 import threading
 import tkinter as tk
 from tkinter import filedialog, simpledialog, ttk
+from datetime import datetime
 
 # CONSTANTS
+UPLOAD_FOLDER = 'Server_data'
 HOST = 'localhost'
 PORT = 9999
 CHUNK_SIZE = 1024*1024
 UPLOAD_FOLDER = 'Server_data'
 socket_lock = threading.Lock()
 
+os.makedirs(UPLOAD_FOLDER, exist_ok = True)
+
 # HANDLE REQUEST TYPE AND FILE INFO
 def receive_request_type_and_file_info(conn):
     data = conn.recv(1024).decode().strip()
     conn.sendall("OK".encode())
-    if data.startswith('upload'):
-        return 'upload', data[len('upload'):]
-    elif data.startswith('download'):
-        return 'download', data[len('download'):]
+    if data.startswith('upload:'):
+        return 'upload', data[len('upload:'):]
+    elif data.startswith('download:'):
+        return 'download', data[len('download:'):]
     else:
         return None, None
     
@@ -31,11 +35,17 @@ def handle_client(conn, addr):
             raise ValueError("Invalid request type or file info")
         print(f"Request: {request_type}")
         print(f"File info: {file_info}")
-    
-        if request_type == 'upload':  
+
+        if request_type == 'check':
+            check_file_existence(conn, file_info.strip())
+        elif request_type == 'upload':  
             file_name, num_chunks = file_info.strip().split(':')
             num_chunks = int(num_chunks.strip())
             print(f"FileUploadname: {file_name}, num_chunks: {num_chunks}")
+
+            # Check for existing file and handle naming conflict
+            file_name = handle_file_name_conflict(file_name)
+
             handle_upload(conn, file_name, num_chunks)
             
         elif request_type == 'download':
@@ -56,6 +66,27 @@ def handle_client(conn, addr):
         print(f"Error: {E}")
     finally:
         conn.close()
+
+# HANDLE FILE EXISTENCE CHECKS
+def check_file_existence(conn, file_name):
+    file_path = os.path.join(UPLOAD_FOLDER, file_name)
+    if os.path.exists(file_path):
+        conn.sendall("EXISTS".encode())
+    else:
+        conn.sendall("NOT_EXISTS".encode())
+
+# HANDLE FILE NAME CONFLICT
+def handle_file_name_conflict(file_name):
+    # Check if the file already exists in the upload folder
+    file_path = os.path.join(UPLOAD_FOLDER, file_name)
+    if os.path.exists(file_path):
+        # Append a timestamp to the file name to make it unique
+        base, ext = os.path.splitext(file_name)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        new_file_name = f"{base}_{timestamp}{ext}"
+        print(f"File {file_name} exists. Remaining to {new_file_name}.")
+        return new_file_name
+    return file_name
 
 #UPLOAD
 def receive_chunk(conn, socket_lock, chunk_paths, file_name, num_chunks):

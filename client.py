@@ -5,11 +5,12 @@ import tkinter as tk
 from tkinter import *
 from tkinter import filedialog, simpledialog, ttk
 
+
 # CONSTANTS
 HOST = 'localhost'
 PORT = 9999
 CHUNK_SIZE = 1024*1024
-#DOWNLOAD_FOLDER = 'Client_data'
+DOWNLOAD_FOLDER = 'Client_data'
 socket_lock = threading.Lock()
 
 # UPLOAD
@@ -33,16 +34,49 @@ def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock, num_chunks
     except Exception as e:
         print(f"Error sending chunk {chunk_path}: {e}")
 
+def check_file_exists(client_socket, file_name):
+    try:
+        client_socket.sendall(f"check:{file_name}".encode())
+        response = client_socket.recv(1024).decode().strip()
+        return response == "EXISTS"
+    except Exception as e:
+        print(f"Error checking file existence: {e}")
+        return False
+
 def upload_file(file_path):
     try:
+        file_name = os.path.basename(file_path)
+        '''
         chunks = split_file(file_path, CHUNK_SIZE)
         num_chunks = len(chunks)
         print(f"Num of chunks: {num_chunks}")
+        '''
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             client_socket.connect((HOST, PORT))
+            # Set a timeout for the socket
+            client_socket.settimeout(10)
+
+            if check_file_exists(client_socket, file_name):
+                action = simpledialog.askstring("File Exists", f"File '{file_name} already exists. Enter 'rename' to rename the file, 'overwrite' to overwrite or 'cancel' to cancel:")
+                if action.lower() == 'rename':
+                    new_name = simpledialog.askstring("Rename File", "Enter the new file name:")
+                    if new_name:
+                        file_name = new_name
+                    else:
+                        print("No new file name provided. Upload cancelled.")
+                        return
+                elif action.lower() == 'cancel':
+                    print("Upload cancelled.")
+                    return
+                
+            chunks = split_file(file_path, CHUNK_SIZE)
+            num_chunks = len(chunks)
+            print(f"Num of chunks: {num_chunks}")
+            
             client_socket.sendall("upload".encode())
-            file_info = f"{os.path.basename(file_path)}:{num_chunks}"
+            file_info = f"{file_name}:{num_chunks}"
+            #file_info = f"{os.path.basename(file_path)}:{num_chunks}"
             client_socket.sendall(file_info.encode())
             ack = client_socket.recv(1024).decode().strip()
             if ack != "OK":
@@ -61,6 +95,8 @@ def upload_file(file_path):
             else:
                 print(f"File {file_path} uploaded successfully.")
 
+    except socket.timeout:
+        print("Connection timed out. Please try again.")
     except Exception as e:
         print(f"Error uploading file {file_path}: {e}")
     finally:
@@ -97,6 +133,7 @@ def download_file(file_name):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             # connect to server
             client_socket.connect((HOST, PORT))
+            client_socket.settimeout(10)
             print(f"Host: {HOST}, Port: {PORT}")
             
             # Send the request type
@@ -112,7 +149,7 @@ def download_file(file_name):
             # Receive the number of chunks
             num_chunks = int(client_socket.recv(1024).decode())
             print(f"Num of chunks: {num_chunks}")
-          # Mở hộp thoại lưu file
+            # Mở hộp thoại lưu file
             download_folder_path = filedialog.askdirectory()
             # Send acknowledgment
             chunk_paths = []
@@ -126,13 +163,13 @@ def download_file(file_name):
                 thread.join()
             
             if None not in chunk_paths:
-                
                 output_file = os.path.join(download_folder_path, file_name)
                 merge_chunks(chunk_paths, output_file)
                 client_socket.send('OK'.encode())
                 print(f"File {file_name} downloaded successfully.")
 
-
+    except socket.timeout:
+        print("Connection timed out. Please try again.")
     except socket.error as E:
         print(f"Socket error: {E}")
     except Exception as E:
@@ -140,14 +177,6 @@ def download_file(file_name):
     
 # ACCESS TO BROWSER
 def select_file_to_upload():
-    '''
-    window=Toplevel(root)
-    window.title("Upload")
-    window.geometry("300x250+300+300")
-    window.configure(bg="linen")
-    window.resizable(False,False)
-    '''
-    
     file_path = filedialog.askopenfilename(initialdir=os.getcwd(),
                                             title='Select Image File',
                                             filetype=(('file_type','*.txt'),('all files','*.*')))
@@ -158,20 +187,12 @@ def select_file_to_upload():
         print("No file selected to upload.")
         
 def select_file_to_download():
-    '''
-    main=Toplevel(root)
-    main.title("Download")
-    main.configure("300x250+300+300")
-    main.resizable(False,False)
-    '''
-    
     file_name = simpledialog.askstring("Download", "Enter the filename to download:")
     if file_name:
         download_file(file_name)
         print(f"File selected: {file_name}")
     else:
-        print("No file selected to download.") 
-        
+        print("No file selected to download.")  
 
 # HELPER FUNCTIONS
 def split_file(file_path, chunk_size):
