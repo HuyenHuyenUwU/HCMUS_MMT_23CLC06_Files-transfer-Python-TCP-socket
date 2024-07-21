@@ -177,15 +177,16 @@ def download_file(file_name):
     
 # ACCESS TO BROWSER
 def select_file_to_upload():
-    file_path = filedialog.askopenfilename(initialdir=os.getcwd(),
+    file_paths = filedialog.askopenfilenames(initialdir=os.getcwd(),
                                             title='Select Image File',
                                             filetype=(('file_type','*.txt'),('all files','*.*')))
-    if file_path:
-        upload_file(file_path)
-        print(f"File selected: {file_path}")
-    else:
-        print("No file selected to upload.")
-        
+    for file_path in file_paths:
+        if file_path:
+            upload_file(file_path)
+            print(f"File selected: {file_path}")
+        else:
+            print("No file selected to upload.")
+            
 def select_file_to_download():
     file_name = simpledialog.askstring("Download", "Enter the filename to download:")
     if file_name:
