@@ -11,7 +11,7 @@ PORT = 9999
 CHUNK_SIZE = 1024*1024
 DOWNLOAD_FOLDER = 'Client_data'
 UPLOAD_FOLDER = 'Server_data'
-# socket_lock = threading.Lock() # Lock for synchronizing socket access
+socket_lock = threading.Lock() # Lock for synchronizing socket access
 
 # UPLOAD
 def upload_file(file_path):
@@ -36,10 +36,8 @@ def upload_file(file_path):
             if ack != 'OK':
                 raise Exception("Failed to receive acknowledgment from server.")
             
-            socket_lock = threading.Lock() # Lock for synchronizing socket access
             # Create threads to upload each chunk
             threads = []
-            
             # Start threads
             for index, chunk_path in enumerate(chunks):
                 thread = threading.Thread(target = upload_chunk, args = (index, chunk_path,client_socket, socket_lock, num_chunks))
@@ -116,8 +114,10 @@ def download_file(file_path):
             
             # Open dialog to choose destination of download folder 
             download_folder_path = filedialog.askdirectory()
+            if not download_folder_path:
+                print("No download folder selected.")
+                return
             
-            socket_lock = threading.Lock() # Lock for synchronizing socket access
             # Init list to store chunk paths and threads
             chunk_paths = []
             threads = []
@@ -131,7 +131,7 @@ def download_file(file_path):
                 
             # Merge chunks if all were downloaded successfully
             if None not in chunk_paths:
-                output_file = ensure_unique_filename(os.path.join(download_folder_path, file_path)) # ensure the file names are unique
+                output_file = os.path.join(download_folder_path, os.path.basename(ensure_unique_filename(file_path, download_folder_path))) # ensure the file names are unique
                 merge_chunks(chunk_paths, output_file)
                 
                 client_socket.send('OK'.encode())
@@ -141,7 +141,7 @@ def download_file(file_path):
     except Exception as E:
         print(f"Error: {E}")
 
-def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_folder_path,socket_lock):
+def download_chunk(file_path, client_socket, chunk_paths, num_chunks, download_folder_path,socket_lock):
     try:
         with socket_lock:
             # Receive chunk info
@@ -156,7 +156,7 @@ def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_f
                 chunk_data += client_socket.recv(min(1024, chunk_size - len(chunk_data)))
                 
             #  Save the chunk data to a file
-            chunk_path = os.path.join(download_folder_path, f"{file_name}_chunk_{chunk_index}")
+            chunk_path = os.path.join(download_folder_path, f"{file_path}_chunk_{chunk_index}")
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk_data)
                 
@@ -165,7 +165,7 @@ def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_f
             print(f"Received chunk_{chunk_index} size: {chunk_size} ({chunk_index + 1}/{num_chunks})")
             chunk_paths.append(chunk_path)
     except Exception as e:
-        print(f"Error downloading file {file_name}: {e}")
+        print(f"Error downloading file {file_path}: {e}")
 
 # ACCESS TO BROWSER
 def select_file_to_upload():
@@ -189,10 +189,11 @@ def select_file_to_download():
             print("No file selected to download.")
         
 # HELPER FUNCTIONS
-def ensure_unique_filename(file_path): # Ensure the filename is unique by appending a number if the file already exists
+def ensure_unique_filename(file_path, download_folder_path): # Ensure the filename is unique by appending a number if the file already exists
     base, ext = os.path.splitext(file_path)
     counter = 1
-    unique_file_path = file_path
+    file_name = os.path.basename(file_path)
+    unique_file_path = os.path.join(os.path.basename(download_folder_path), file_name)
     
     while os.path.exists(unique_file_path):
         unique_file_path = f"{base}_{counter}{ext}"

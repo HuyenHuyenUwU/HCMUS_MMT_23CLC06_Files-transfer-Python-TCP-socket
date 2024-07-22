@@ -179,6 +179,18 @@ def ensure_unique_filename(file_path):
         counter += 1
     
     return unique_file_path
+# HELPER FUNCTIONS
+def ensure_unique_filename(file_path, download_folder_path): # Ensure the filename is unique by appending a number if the file already exists
+    base, ext = os.path.splitext(file_path)
+    counter = 1
+    file_name = os.path.basename(file_path)
+    unique_file_path = os.path.join(os.path.basename(download_folder_path), file_name)
+    
+    while os.path.exists(unique_file_path):
+        unique_file_path = f"{base}_{counter}{ext}"
+        counter += 1
+    
+    return unique_file_path
 
 def split_file(file_path, chunk_size):
     chunks = []
@@ -216,6 +228,7 @@ def start_server():
             # Handle the client connection in a new thread
             client_thread = threading.Thread(target = handle_client, args = (conn,addr))
             client_thread.start()
+            
 
 def main():
     try:
