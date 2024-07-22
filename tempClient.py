@@ -107,7 +107,7 @@ def download_file(file_path):
             print(f"Send request to server: {"list_files".encode()}")
             #print(f"Send filename to server: {file_path.encode()}")
 
-            files_list = client_socket.recv(1024).deccode().split(',')
+            files_list = client_socket.recv(1024).decode().split(',')
             print(f"Files available for download: {files_list}")
 
             # Process the information
@@ -217,7 +217,7 @@ def display_table(df):
 
     #Insert data into Treeview
     for _, row in df.iterrows():
-        tree.insert("", "end", values=(row["ID"], row["name"], row["size"]))
+        tree.insert("", "end", values=(row["ID"], row["name"]))
     
     tree.pack(fill=BOTH, expand = True)
 
@@ -268,7 +268,9 @@ def merge_chunks(chunks, output_file): # Merge the chunks into a single output f
 
 def main():
     # Initialize the Tkinter root window
-    global root;
+    global root,df
+    df = pd.DataFrame(columns = ["ID", "Name"])
+    
     root = Tk()
     root.title("File Transfer Application")
     root.geometry("300x250+300+300")
@@ -287,7 +289,7 @@ def main():
     
     # Download button
     download_image = PhotoImage(file="Image/download.png")
-    download = Button(root,image=download_image,bg="linen",bd=0,command=select_file_to_download)
+    download = Button(root,image=download_image,bg="linen",bd=0,command=lambda: display_table(df))
     download.place(x=185,y=50)
     Label(root,text="Download",font=('arial', 16, 'bold'),bg='linen').place(x=165,y=125)
     
