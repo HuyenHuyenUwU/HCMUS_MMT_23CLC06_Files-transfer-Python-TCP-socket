@@ -113,7 +113,7 @@ def download_file(file_path):
             # Process the information
             file_info_list = []
             for i, file_info in enumerate(files_list):
-                name, size = file_info.split(':')
+                name = file_info.split(':')
                 file_info_list.append({"ID": i+1, "name": name})
             
             # Create dataframe to store file information
