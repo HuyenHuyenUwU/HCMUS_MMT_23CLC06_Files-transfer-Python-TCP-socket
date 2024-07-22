@@ -170,23 +170,23 @@ def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_f
 # ACCESS TO BROWSER
 def select_file_to_upload():
     # Open file dialog to select a file for upload
-    file_path = filedialog.askopenfilename(initialdir = os.getcwd(), title = 'Select File to Upload', filetype = (('text files', '*.txt'),('all files', '*.*')))
-
-    if file_path:
-        upload_file(file_path)
-        print(f"File selected: {file_path}")
-    else:
-        print("No file selected to upload.")
+    file_paths = filedialog.askopenfilenames(initialdir = os.getcwd(), title = 'Select File to Upload', filetype = (('text files', '*.txt'),('all files', '*.*')))
+    for file_path in file_paths:
+        if file_path:
+            upload_file(file_path)
+            print(f"File selected: {file_path}")
+        else:
+            print("No file selected to upload.")
     
 def select_file_to_download():
     # Open file dialog to select a filefrom 'Server_data' folder
-    file_path = filedialog.askopenfilename(initialdir = os.getcwd(), title = 'Select File to Download', filetypes = (('all files', '*.*'), ('text files', '*.txt')))
-    
-    if file_path:
-        download_file(file_path)
-        print(f"File selected: {file_path}")
-    else:
-        print("No file selected to download.")
+    file_paths = filedialog.askopenfilenames(initialdir = UPLOAD_FOLDER, title = 'Select File to Download', filetypes = (('all files', '*.*'), ('text files', '*.txt')))
+    for file_path in file_paths:
+        if file_path:
+            download_file(file_path)
+            print(f"File selected: {file_path}")
+        else:
+            print("No file selected to download.")
         
 # HELPER FUNCTIONS
 def ensure_unique_filename(file_path): # Ensure the filename is unique by appending a number if the file already exists
