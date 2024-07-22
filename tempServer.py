@@ -190,7 +190,7 @@ def split_file(file_path, chunk_size):
             chunk_filename = f"{file_path}_part_{len(chunks)}"
             with open(chunk_filename, 'wb') as chunk_file:
                 chunk_file.write(chunk)
-            chunks.append(chunk_file)
+            chunks.append(chunk_filename)
     return chunks
 
 def merge_chunks(chunks, output_file):

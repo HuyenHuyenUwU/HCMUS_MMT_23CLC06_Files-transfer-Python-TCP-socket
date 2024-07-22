@@ -11,7 +11,7 @@ PORT = 9999
 CHUNK_SIZE = 1024*1024
 DOWNLOAD_FOLDER = 'Client_data'
 UPLOAD_FOLDER = 'Server_data'
-socket_lock = threading.Lock() # Lock for synchronizing socket access
+# socket_lock = threading.Lock() # Lock for synchronizing socket access
 
 # UPLOAD
 def upload_file(file_path):
@@ -36,6 +36,7 @@ def upload_file(file_path):
             if ack != 'OK':
                 raise Exception("Failed to receive acknowledgment from server.")
             
+            socket_lock = threading.Lock() # Lock for synchronizing socket access
             # Create threads to upload each chunk
             threads = []
             
@@ -116,11 +117,12 @@ def download_file(file_path):
             # Open dialog to choose destination of download folder 
             download_folder_path = filedialog.askdirectory()
             
+            socket_lock = threading.Lock() # Lock for synchronizing socket access
             # Init list to store chunk paths and threads
             chunk_paths = []
             threads = []
             for _ in range(num_chunks):
-                thread = threading.Thread(target = download_chunk, args = (file_path, client_socket, chunk_paths, num_chunks, download_folder_path))
+                thread = threading.Thread(target = download_chunk, args = (file_path, client_socket, chunk_paths, num_chunks, download_folder_path, socket_lock))
                 threads.append(thread)
                 thread.start()
                 
@@ -139,7 +141,7 @@ def download_file(file_path):
     except Exception as E:
         print(f"Error: {E}")
 
-def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_folder_path):
+def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_folder_path,socket_lock):
     try:
         with socket_lock:
             # Receive chunk info
@@ -208,7 +210,7 @@ def split_file(file_path, chunk_size): # Split the file into chunks of specified
             chunk_filename = f"{file_path}_part_{len(chunks)}"
             with open(chunk_filename, 'wb') as chunk_file:
                 chunk_file.write(chunk)
-            chunks.append(chunk_file)
+            chunks.append(chunk_filename)
     return chunks
 
 def merge_chunks(chunks, output_file): # Merge the chunks into a single output file
