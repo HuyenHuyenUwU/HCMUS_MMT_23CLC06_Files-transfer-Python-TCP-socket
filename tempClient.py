@@ -39,7 +39,6 @@ def upload_file(file_path):
             
             # Create threads to upload each chunk
             threads = []
-            
             # Start threads
             for index, chunk_path in enumerate(chunks):
                 thread = threading.Thread(target = upload_chunk, args = (index, chunk_path,client_socket, socket_lock, num_chunks))
@@ -132,12 +131,15 @@ def download_file(file_path):
             
             # Open dialog to choose destination of download folder 
             download_folder_path = filedialog.askdirectory()
+            if not download_folder_path:
+                print("No download folder selected.")
+                return
             
             # Init list to store chunk paths and threads
             chunk_paths = []
             threads = []
             for _ in range(num_chunks):
-                thread = threading.Thread(target = download_chunk, args = (file_path, client_socket, chunk_paths, num_chunks, download_folder_path))
+                thread = threading.Thread(target = download_chunk, args = (file_path, client_socket, chunk_paths, num_chunks, download_folder_path, socket_lock))
                 threads.append(thread)
                 thread.start()
                 
@@ -146,7 +148,7 @@ def download_file(file_path):
                 
             # Merge chunks if all were downloaded successfully
             if None not in chunk_paths:
-                output_file = ensure_unique_filename(os.path.join(download_folder_path, file_path)) # ensure the file names are unique
+                output_file = os.path.join(download_folder_path, os.path.basename(ensure_unique_filename(file_path, download_folder_path))) # ensure the file names are unique
                 merge_chunks(chunk_paths, output_file)
                 
                 client_socket.send('OK'.encode())
@@ -156,7 +158,7 @@ def download_file(file_path):
     except Exception as E:
         print(f"Error: {E}")
 
-def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_folder_path):
+def download_chunk(file_path, client_socket, chunk_paths, num_chunks, download_folder_path,socket_lock):
     try:
         with socket_lock:
             # Receive chunk info
@@ -171,7 +173,7 @@ def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_f
                 chunk_data += client_socket.recv(min(1024, chunk_size - len(chunk_data)))
                 
             #  Save the chunk data to a file
-            chunk_path = os.path.join(download_folder_path, f"{file_name}_chunk_{chunk_index}")
+            chunk_path = os.path.join(download_folder_path, f"{file_path}_chunk_{chunk_index}")
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk_data)
                 
@@ -180,13 +182,12 @@ def download_chunk(file_name, client_socket, chunk_paths, num_chunks, download_f
             print(f"Received chunk_{chunk_index} size: {chunk_size} ({chunk_index + 1}/{num_chunks})")
             chunk_paths.append(chunk_path)
     except Exception as e:
-        print(f"Error downloading file {file_name}: {e}")
+        print(f"Error downloading file {file_path}: {e}")
 
 # ACCESS TO BROWSER
 def select_file_to_upload():
     # Open file dialog to select a file for upload
     file_paths = filedialog.askopenfilenames(initialdir = os.getcwd(), title = 'Select File to Upload', filetype = (('text files', '*.txt'),('all files', '*.*')))
-
     for file_path in file_paths:
         if file_path:
             upload_file(file_path)
@@ -204,34 +205,7 @@ def select_file_to_download():
             print(f"File selected: {file_path}")
         else:
             print("No file selected to download.")
-
-def display_table(df):
-    table_window = Toplevel(root)
-    table_window.title("Availabel Files for Download")
-    table_window.configure(bg="linen")
-
-    # Create tree view
-    tree = ttk.Treeview(table_window, columns =("ID", "Name"), show = "headings")
-    tree.heading("ID", text = "ID")
-    tree.heading("Name", text = "File Name")
-
-    #Insert data into Treeview
-    for _, row in df.iterrows():
-        tree.insert("", "end", values=(row["ID"], row["name"], row["size"]))
-    
-    tree.pack(fill=BOTH, expand = True)
-
-    # Add double click event to download the file
-    tree.bind("<Double-1>", lambda event: on_double_click(event, df, tree))
-
-def on_double_click(event, df, tree):
-    item = tree.selection()[0]
-    file_name = tree.item(item, "values")[1]
-    download_file(file_name)
-    
-    
-    
-
+        
 # HELPER FUNCTIONS
 def ensure_unique_filename(file_path, download_folder_path): # Ensure the filename is unique by appending a number if the file already exists
     base, ext = os.path.splitext(file_path)

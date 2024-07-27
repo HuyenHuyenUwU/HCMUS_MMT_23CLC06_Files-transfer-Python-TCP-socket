@@ -231,6 +231,7 @@ def start_server():
             # Handle the client connection in a new thread
             client_thread = threading.Thread(target = handle_client, args = (conn,addr))
             client_thread.start()
+            
 
 def main():
     try:
