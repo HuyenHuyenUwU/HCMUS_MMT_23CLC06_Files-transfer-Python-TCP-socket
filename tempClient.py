@@ -106,7 +106,7 @@ def download_file(file_path):
             print(f"Send request to server: {"list_files".encode()}")
             #print(f"Send filename to server: {file_path.encode()}")
 
-            files_list = client_socket.recv(1024).deccode().split(',')
+            files_list = client_socket.recv(1024).decode().split(',')
             print(f"Files available for download: {files_list}")
 
             # Process the information
@@ -205,7 +205,38 @@ def select_file_to_download():
             print(f"File selected: {file_path}")
         else:
             print("No file selected to download.")
+<<<<<<< HEAD
         
+=======
+
+def display_table(df):
+    table_window = Toplevel(root)
+    table_window.title("Availabel Files for Download")
+    table_window.configure(bg="linen")
+
+    # Create tree view
+    tree = ttk.Treeview(table_window, columns =("ID", "Name"), show = "headings")
+    tree.heading("ID", text = "ID")
+    tree.heading("Name", text = "File Name")
+
+    #Insert data into Treeview
+    for _, row in df.iterrows():
+        tree.insert("", "end", values=(row["ID"], row["name"]))
+    
+    tree.pack(fill=BOTH, expand = True)
+
+    # Add double click event to download the file
+    tree.bind("<Double-1>", lambda event: on_double_click(event, df, tree))
+
+def on_double_click(event, df, tree):
+    item = tree.selection()[0]
+    file_name = tree.item(item, "values")[1]
+    download_file(file_name)
+    
+    
+    
+
+>>>>>>> 6e2d13a045da8b8d5d6ed5c07fa6f7092d47b453
 # HELPER FUNCTIONS
 def ensure_unique_filename(file_path, download_folder_path): # Ensure the filename is unique by appending a number if the file already exists
     base, ext = os.path.splitext(file_path)
@@ -242,7 +273,9 @@ def merge_chunks(chunks, output_file): # Merge the chunks into a single output f
 
 def main():
     # Initialize the Tkinter root window
-    global root;
+    global root,df
+    df = pd.DataFrame(columns = ["ID", "Name"])
+    
     root = Tk()
     root.title("File Transfer Application")
     root.geometry("300x250+300+300")
@@ -261,7 +294,7 @@ def main():
     
     # Download button
     download_image = PhotoImage(file="Image/download.png")
-    download = Button(root,image=download_image,bg="linen",bd=0,command=select_file_to_download)
+    download = Button(root,image=download_image,bg="linen",bd=0,command=lambda: display_table(df))
     download.place(x=185,y=50)
     Label(root,text="Download",font=('arial', 16, 'bold'),bg='linen').place(x=165,y=125)
     

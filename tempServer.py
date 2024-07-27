@@ -8,7 +8,7 @@ from tkinter import filedialog
 HOST = 'localhost'
 PORT = 9999
 CHUNK_SIZE = 1024*1024
-UPLOAD_FOLDER = 'Client_data'
+UPLOAD_FOLDER = 'Server_data'
 socket_lock = threading.Lock() # Initialize the lock for thread-safe operations
     
 # HANDLE CLIENT REQUESTS
@@ -229,7 +229,7 @@ def start_server():
             conn, addr = server_socket.accept()
             print(f"Connected with client {addr[0]}:{addr[1]}")
             # Handle the client connection in a new thread
-            client_thread = threading.Thread(target = handle_client, args = (conn,addr))
+            client_thread = threading.Thread(target = handle_client, args = (conn,addr,server_socket))
             client_thread.start()
             
 
