@@ -14,53 +14,60 @@ DOWNLOAD_FOLDER = 'Client_data'
 UPLOAD_FOLDER = 'Server_data'
 socket_lock = threading.Lock() # Lock for synchronizing socket access
 
+#GLOBAL VARIABLES
+uploaded_files = []
+
 # UPLOAD
 def upload_file(file_path):
-    try:
-        # Split the file into chunks
-        chunks = split_file(file_path, CHUNK_SIZE)
-        num_chunks = len(chunks)
-        print(f"Num of chunks: {num_chunks}")
-        
-        # Create a socket for the client
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-            # Connect to the server
-            client_socket.connect((HOST,PORT))
-            # Send the request type
-            client_socket.sendall('upload'.encode())
+    def upload_task():
+        try:
+            # Split the file into chunks
+            chunks = split_file(file_path, CHUNK_SIZE)
+            num_chunks = len(chunks)
+            print(f"Num of chunks: {num_chunks}")
             
-            # Send the file info
-            file_info = f"{os.path.basename(file_path)}:{num_chunks}"
-            client_socket.sendall(file_info.encode())
-            # ACK for receving file info
-            ack = client_socket.recv(1024).decode().strip()
-            if ack != 'OK':
-                raise Exception("Failed to receive acknowledgment from server.")
-            
-            # Create threads to upload each chunk
-            threads = []
-            # Start threads
-            for index, chunk_path in enumerate(chunks):
-                thread = threading.Thread(target = upload_chunk, args = (index, chunk_path,client_socket, socket_lock, num_chunks))
-                threads.append(thread)
-                thread.start()
-            
-            # Wait for all threads finish
-            for thread in threads:
-                thread.join()
+            # Create a socket for the client
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                # Connect to the server
+                client_socket.connect((HOST,PORT))
+                # Send the request type
+                client_socket.sendall('upload'.encode())
                 
-            # Final ACK
-            ack = client_socket.recv(1024).decode().strip()
-            if ack != 'OK':
-                raise Exception("Failed to receive acknowledgment from server.")
-            else:
-                print(f"File {file_path} uploaded successfully.")
-    except Exception as e:
-        print(f"Error uploading file {file_path}: {e}")
-    finally:
-        # Clean up chunk file
-        for chunk in chunks:
-            os.remove(chunk)
+                # Send the file info
+                file_info = f"{os.path.basename(file_path)}:{num_chunks}"
+                client_socket.sendall(file_info.encode())
+                # ACK for receving file info
+                ack = client_socket.recv(1024).decode().strip()
+                if ack != 'OK':
+                    raise Exception("Failed to receive acknowledgment from server.")
+                
+                # Create threads to upload each chunk
+                threads = []
+                # Start threads
+                for index, chunk_path in enumerate(chunks):
+                    thread = threading.Thread(target = upload_chunk, args = (index, chunk_path,client_socket, socket_lock, num_chunks))
+                    threads.append(thread)
+                    thread.start()
+                
+                # Wait for all threads finish
+                for thread in threads:
+                    thread.join()
+                    
+                # Final ACK
+                ack = client_socket.recv(1024).decode().strip()
+                if ack != 'OK':
+                    raise Exception("Failed to receive acknowledgment from server.")
+                else:
+                    print(f"File {file_path} uploaded successfully.")
+                # add at 13h59
+                update_uploaded_files(os.path.basename(file_path))
+        except Exception as e:
+            print(f"Error uploading file {file_path}: {e}")
+        finally:
+            # Clean up chunk file
+            for chunk in chunks:
+                os.remove(chunk)
+    threading.Thread(target=upload_task).start()
             
 def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock, num_chunks):
     try:
@@ -86,77 +93,70 @@ def upload_chunk(chunk_index, chunk_path, client_socket, socket_lock, num_chunks
                 print(f"sent chunk_{chunk_index} size: {os.path.getsize(chunk_path)} ({chunk_index + 1}/{num_chunks})")
     except Exception as e:
         print(f"Error sending chunk {chunk_path}: {e}")
-        
+
+
+def update_uploaded_files(file_name):
+    uploaded_files.append(file_name)
+    
 # DOWNLOAD
 def download_file(file_path):
-    try:
-        # create socket
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-            # connect to server
-            client_socket.connect((HOST, PORT))
-            print(f"Host: {HOST}, Port: {PORT}")
-            
-            # Send the request type
-            client_socket.sendall("download".encode())
-            print(f"Send request to server: {"download".encode()}")
-            
-            # Send the file name
-            #client_socket.sendall(file_path.encode())
-            client_socket.sendall("list files".encode())
-            print(f"Send request to server: {"list_files".encode()}")
-            #print(f"Send filename to server: {file_path.encode()}")
-
-            files_list = client_socket.recv(1024).decode().split(',')
-            print(f"Files available for download: {files_list}")
-
-            # Process the information
-            file_info_list = []
-            for i, file_info in enumerate(files_list):
-                name = file_info.split(':')
-                file_info_list.append({"ID": i+1, "name": name})
-            
-            # Create dataframe to store file information
-            file_df = pd.DataFrame(file_info_list)
-
-            display_table(file_df)
-
-            # ACK for receving file name
-            ack = client_socket.recv(1024).decode().strip()
-            if ack != "OK":
-                raise Exception("Failed to receive acknowledgment from server.")
-            
-            # Receive the number of chunks
-            num_chunks = int(client_socket.recv(1024).decode())
-            print(f"Num of chunks: {num_chunks}")
-            
-            # Open dialog to choose destination of download folder 
-            download_folder_path = filedialog.askdirectory()
-            if not download_folder_path:
-                print("No download folder selected.")
-                return
-            
-            # Init list to store chunk paths and threads
-            chunk_paths = []
-            threads = []
-            for _ in range(num_chunks):
-                thread = threading.Thread(target = download_chunk, args = (file_path, client_socket, chunk_paths, num_chunks, download_folder_path, socket_lock))
-                threads.append(thread)
-                thread.start()
+    def download_task():
+        try:
+            # create socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                # connect to server
+                client_socket.connect((HOST, PORT))
+                print(f"Host: {HOST}, Port: {PORT}")
                 
-            for thread in threads:
-                thread.join()
+                # Send the request type
+                client_socket.sendall("download".encode())
+                print(f"Send request to server: {"download".encode()}")
                 
-            # Merge chunks if all were downloaded successfully
-            if None not in chunk_paths:
-                output_file = os.path.join(download_folder_path, os.path.basename(ensure_unique_filename(file_path, download_folder_path))) # ensure the file names are unique
-                merge_chunks(chunk_paths, output_file)
+                # Send the file name
+                client_socket.sendall(file_path.encode())
+                #client_socket.sendall("list files".encode())
+                #print(f"Send request to server: {"list_files".encode()}")
+                print(f"Send filename to server: {file_path.encode()}")
+
+                # ACK for receving file name
+                ack = client_socket.recv(1024).decode().strip()
+                if ack != "OK":
+                    raise Exception("Failed to receive acknowledgment from server.")
                 
-                client_socket.send('OK'.encode())
-                print(f"File {file_path} downloaded successfully.")
-    except socket.error as E:
-        print(f"Socket error: {E}")
-    except Exception as E:
-        print(f"Error: {E}")
+                # Receive the number of chunks
+                num_chunks = int(client_socket.recv(1024).decode())
+                print(f"Num of chunks: {num_chunks}")
+                
+                # Open dialog to choose destination of download folder 
+                download_folder_path = filedialog.askdirectory()
+                if not download_folder_path:
+                    print("No download folder selected.")
+                    return
+                
+                # Init list to store chunk paths and threads
+                chunk_paths = []
+                threads = []
+                for _ in range(num_chunks):
+                    thread = threading.Thread(target = download_chunk, args = (file_path, client_socket, chunk_paths, num_chunks, download_folder_path, socket_lock))
+                    threads.append(thread)
+                    thread.start()
+                    
+                for thread in threads:
+                    thread.join()
+                    
+                # Merge chunks if all were downloaded successfully
+                if None not in chunk_paths:
+                    output_file = os.path.join(download_folder_path, os.path.basename(ensure_unique_filename(file_path, download_folder_path))) # ensure the file names are unique
+                    merge_chunks(chunk_paths, output_file)
+                    
+                    client_socket.send('OK'.encode())
+                    print(f"File {file_path} downloaded successfully.")
+        except socket.error as E:
+            print(f"Socket error: {E}")
+        except Exception as E:
+            print(f"Error: {E}")
+    threading.Thread(target=download_task).start()
+
 
 def download_chunk(file_path, client_socket, chunk_paths, num_chunks, download_folder_path,socket_lock):
     try:
@@ -184,6 +184,7 @@ def download_chunk(file_path, client_socket, chunk_paths, num_chunks, download_f
     except Exception as e:
         print(f"Error downloading file {file_path}: {e}")
 
+
 # ACCESS TO BROWSER
 def select_file_to_upload():
     # Open file dialog to select a file for upload
@@ -205,45 +206,17 @@ def select_file_to_download():
             print(f"File selected: {file_path}")
         else:
             print("No file selected to download.")
-<<<<<<< HEAD
+
+
         
-=======
-
-def display_table(df):
-    table_window = Toplevel(root)
-    table_window.title("Availabel Files for Download")
-    table_window.configure(bg="linen")
-
-    # Create tree view
-    tree = ttk.Treeview(table_window, columns =("ID", "Name"), show = "headings")
-    tree.heading("ID", text = "ID")
-    tree.heading("Name", text = "File Name")
-
-    #Insert data into Treeview
-    for _, row in df.iterrows():
-        tree.insert("", "end", values=(row["ID"], row["name"]))
-    
-    tree.pack(fill=BOTH, expand = True)
-
-    # Add double click event to download the file
-    tree.bind("<Double-1>", lambda event: on_double_click(event, df, tree))
-
-def on_double_click(event, df, tree):
-    item = tree.selection()[0]
-    file_name = tree.item(item, "values")[1]
-    download_file(file_name)
-    
-    
-    
-
->>>>>>> 6e2d13a045da8b8d5d6ed5c07fa6f7092d47b453
 # HELPER FUNCTIONS
 def ensure_unique_filename(file_path, download_folder_path): # Ensure the filename is unique by appending a number if the file already exists
     base, ext = os.path.splitext(file_path)
     counter = 1
     file_name = os.path.basename(file_path)
-    unique_file_path = os.path.join(os.path.basename(download_folder_path),file_name)
-    
+    unique_file_path = os.path.join(download_folder_path, file_name)
+
+
     while os.path.exists(unique_file_path):
         unique_file_path = f"{base}_{counter}{ext}"
         counter += 1
@@ -273,9 +246,7 @@ def merge_chunks(chunks, output_file): # Merge the chunks into a single output f
 
 def main():
     # Initialize the Tkinter root window
-    global root,df
-    df = pd.DataFrame(columns = ["ID", "Name"])
-    
+    global root
     root = Tk()
     root.title("File Transfer Application")
     root.geometry("300x250+300+300")
@@ -294,10 +265,11 @@ def main():
     
     # Download button
     download_image = PhotoImage(file="Image/download.png")
-    download = Button(root,image=download_image,bg="linen",bd=0,command=lambda: display_table(df))
+    download = Button(root,image=download_image,bg="linen",bd=0,command=select_file_to_download)
+    #download = Button(root,image=download_image,bg="linen",bd=0,command=select_file_to_download)
     download.place(x=185,y=50)
     Label(root,text="Download",font=('arial', 16, 'bold'),bg='linen').place(x=165,y=125)
-    
+
     root.mainloop()
     
 if __name__ == "__main__":
