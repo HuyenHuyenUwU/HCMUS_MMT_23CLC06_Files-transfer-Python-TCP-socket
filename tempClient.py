@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 import pandas as pd
 from tkinter import *
-from tkinter import filedialog, simpledialog, ttk
+from tkinter import filedialog, simpledialog, ttk, messagebox
 
 # CONSTANTS
 HOST = 'localhost'
@@ -59,10 +59,13 @@ def upload_file(file_path):
                     raise Exception("Failed to receive acknowledgment from server.")
                 else:
                     print(f"File {file_path} uploaded successfully.")
-                # add at 13h59
+                # Update the uploaded file list
                 update_uploaded_files(os.path.basename(file_path))
+                # Notify user of successful upload
+                messagebox.showinfo('Upload',f"File{file_path} upload successfully!")
         except Exception as e:
             print(f"Error uploading file {file_path}: {e}")
+            messagebox.showerror('Upload', f"Error uploading file {file_path}: {e}")
         finally:
             # Clean up chunk file
             for chunk in chunks:
@@ -151,10 +154,14 @@ def download_file(file_path):
                     
                     client_socket.send('OK'.encode())
                     print(f"File {file_path} downloaded successfully.")
+                    # Notify user of successful download
+                    messagebox.showinfo('Download', f"{file_path} downloaded successfully!")
         except socket.error as E:
             print(f"Socket error: {E}")
+            messagebox.showerror('Download', f"Socket error: {E}")
         except Exception as E:
             print(f"Error: {E}")
+            messagebox.showerror('Download',f"Error: {E}")
     threading.Thread(target=download_task).start()
 
 
