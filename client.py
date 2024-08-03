@@ -102,20 +102,8 @@ def download_file(file_path):
             print(f"Send request to server: {"download".encode()}")
             
             # Send the file name
-            #client_socket.sendall(file_path.encode())
-            client_socket.sendall("list files".encode())
-            print(f"Send request to server: {"list_files".encode()}")
-            #print(f"Send filename to server: {file_path.encode()}")
-
-            files_list = client_socket.recv(1024).decode().split(',')
-            print(f"Files available for download: {files_list}")
-
-            # Process the information
-            file_info_list = []
-            for i, file_info in enumerate(files_list):
-                name = file_info.split(':')
-                file_info_list.append({"ID": i+1, "name": name})
-
+            client_socket.sendall(file_path.encode())
+            print(f"Send filename to server: {file_path.encode()}")
             # ACK for receving file name
             ack = client_socket.recv(1024).decode().strip()
             if ack != "OK":
