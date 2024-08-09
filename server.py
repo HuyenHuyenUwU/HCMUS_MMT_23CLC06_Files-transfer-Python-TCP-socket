@@ -8,7 +8,7 @@ from tkinter import filedialog
 HOST = 'localhost'
 PORT = 9999
 CHUNK_SIZE = 1024*1024
-UPLOAD_FOLDER = 'Server_data'
+DATA_FOLDER = 'Server_data'
 socket_lock = threading.Lock() # Initialize the lock for thread-safe operations
     
 # HANDLE CLIENT REQUESTS
@@ -62,7 +62,7 @@ def handle_upload(conn, file_name,num_chunks):
             
         # Merge chunks if all were downloaded successfully
         if None not in chunk_paths:
-            output_file = ensure_unique_filename(os.path.join(UPLOAD_FOLDER, file_name))
+            output_file = ensure_unique_filename(os.path.join(DATA_FOLDER, file_name))
             merge_chunks(chunk_paths, output_file)
             
             conn.sendall("OK".encode())
@@ -86,7 +86,7 @@ def receive_chunk(conn, socket_lock, chunk_paths, file_name, num_chunks):
                 chunk_data +=conn.recv(min(1024, chunk_size - len(chunk_data)))
                 
             # Save the chunk data to a file
-            chunk_path = os.path.join(UPLOAD_FOLDER, f"{file_name}_chunk_{chunk_index}")
+            chunk_path = os.path.join(DATA_FOLDER, f"{file_name}_chunk_{chunk_index}")
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk_data)
             # ACK for a chunk
@@ -102,7 +102,7 @@ def receive_chunk(conn, socket_lock, chunk_paths, file_name, num_chunks):
 def handle_download(conn, file_name):
     try:
         # Get file path
-        file_path = os.path.join(UPLOAD_FOLDER, file_name)
+        file_path = os.path.join(DATA_FOLDER, file_name)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File {file_name} not found.")
 
